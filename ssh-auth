@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+VERSION=1
+QR_CODE_LINK_HANDLER_URL=
+PHONE_CHECK_URL=https://eu.api.tru.id/phone_check/v0.1/checks
+GET_PHONE_CHECK_URL=https://eu.api.tru.id/phone_check/v0.1/checks/
+CREATE_AUTH_TOKEN_URL=https://eu.api.tru.id/oauth2/v1/token
+
+#TODO: Replace this by retrieving it from tru.json file
+BASIC_AUTH_USER=<YOUR_CLIENT_ID>
+BASIC_AUTH_PASSWORD=<YOUR_CLIENT_SECRET>
+
+ACCESS_TOKEN=
+
+OK=0
+FAIL=1
+SEQ="seq"
+
+function check_dependencies() {
+  if ! type "seq" > /dev/null 2>&1;
+  then
+    if ! type "jot" > /dev/null 2>&1;
+    then
+      echo "You need installed on your system either 'seq' or 'jot' command"
+      exit $FAIL
+    else
+      SEQ="jot"
+    fi
+  fi
+}
+
+function require_curl() {
+    which curl 2>&1 > /dev/null
+    if [ $? -eq 0 ]
+    then
+        return $OK
+    fi
+
+    # if `which` is not installed this check is ran
+    curl --help 2>&1 > /dev/null
+
+    return $FAIL
+}
+
+function create_access_token() {
+    CREDENTIALS=$(echo -ne "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" | base64);
+
+    # Make request to get access token
+    response=`curl \
+        --header "Authorization: Basic $CREDENTIALS" \
+        --header "Content-Type: application/x-www-form-urlencoded" \
+        --request POST $CREATE_AUTH_TOKEN_URL\
+        --data-urlencode 'grant_type=client_credentials' \
+        --data-urlencode 'scope=phone_check coverage' --silent`
+
+    curl_exit_code=$?
+
+    # Parses response to get the access token
+    ACCESS_TOKEN=$(jq -r .access_token <<< "${response}" )
+    
+    if [ $curl_exit_code -ne 0 ]
+    then
+        echo "Error running curl"
+    fi
+}
+
+function create_check() {
+    if [ "$2" == "" ]; then
+        echo "Positional parameter 1 is empty"
+
+        return 0
+    fi
+
+    echo "Create Access Token"
+    create_access_token
+
+    echo "Make Phone Check request"
+
+    response=`curl \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --header "Content-Type: application/json" \
+        --request POST $PHONE_CHECK_URL\
+        --data-raw "{\"phone_number\":\"${2}\"}" --silent`
+
+    curl_exit_code=$?
+    
+    if [ $curl_exit_code -ne 0 ]
+    then
+        echo "Error running curl"
+    fi
+
+    echo "Handle Phone Check Response"
+
+    check_id=$(jq -r .check_id <<< "${response}" )
+    status=$(jq -r .status <<< "${response}" )
+    check_url=$(jq -r ._links.check_url.href <<< "${response}" )
+
+    qrencode -s 30 -t ANSI "https://r.tru.id?u=${check_url}&c=${check_id}&t=${ACCESS_TOKEN}"
+
+    # Start polling
+
+    # Check every 5 seconds for status on Check.
+    interval_in_seconds=5
+
+    while true;
+    do
+        # Check status of phone check
+        response=`curl \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --request GET $GET_PHONE_CHECK_URL/${check_id}  --silent`
+
+        curl_exit_code=$?
+        
+        if [ $curl_exit_code -ne 0 ]
+        then
+            echo "Error running curl"
+        fi
+
+        status=$(jq -r .status <<< "${response}" )
+        match=$(jq -r .match <<< "${response}" )
+
+        # If check is complete, output
+        if [[ "$status" != "PENDING" && "$status" != "ACCEPTED" ]]; then
+            if [ "$status" == "COMPLETED" ]; then
+                echo "Completed";
+            elif [ "$status" == "EXPIRED" ]; then
+                echo "Expired";
+            elif [ "$status" == "ERROR" ]; then
+                echo "Error";
+            else
+                echo "$status"
+                echo "No idea";
+            fi
+
+            break;
+        fi
+
+        # Otherwise continue
+        sleep $interval_in_seconds;
+    done
+
+}
+
+# function start_polling() {
+
+# }
+
+require_curl
+
+# get the absolute path to the command
+cd `dirname $0`
+COMMAND="$PWD/`basename $0`"
+cd - >/dev/null
+
+case $1 in
+    version)
+        echo "tru.ID Auth SSH v${VERSION}"
+        exit 0
+        ;;
+    create-access-token)
+        create_access_token
+        ;;
+    create-check)
+        create_check "$@"
+        ;;
+    *)
+        cat <<__EOF__
+Usage: ssh-auth <command> <arguments>
+
+VERSION $VERSION
+
+Available commands:
+    version
+        Outputs the tru.ID SSH Auth Version
+
+__EOF__
+        ;;
+esac
