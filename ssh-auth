@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
-
 VERSION=1
-QR_CODE_LINK_HANDLER_URL=
-PHONE_CHECK_URL=https://eu.api.tru.id/phone_check/v0.1/checks
-GET_PHONE_CHECK_URL=https://eu.api.tru.id/phone_check/v0.1/checks/
-CREATE_AUTH_TOKEN_URL=https://eu.api.tru.id/oauth2/v1/token
 
-#TODO: Replace this by retrieving it from tru.json file
-BASIC_AUTH_USER=<YOUR_CLIENT_ID>
-BASIC_AUTH_PASSWORD=<YOUR_CLIENT_SECRET>
+# Base URL information
+DATA_RESIDENCY=eu
+BASE_URL="https://$DATA_RESIDENCY.api.tru.id"
 
+# API Check URLs
+PHONE_CHECK_URL="$BASE_URL/phone_check/v0.1/checks"
+GET_PHONE_CHECK_URL="$BASE_URL/phone_check/v0.1/checks/"
+CREATE_AUTH_TOKEN_URL="$BASE_URL/oauth2/v1/token"
+
+APP_ROOT=`dirname $0`
+CONFIG_FILE="$APP_ROOT/tru-id-ssh-auth.conf"
+DEST_DIRECTORY="/usr/local/bin/"
+
+# Empty Global Variables
+BASIC_AUTH_USER=
+BASIC_AUTH_PASSWORD=
 ACCESS_TOKEN=
 
+# Status Values
 OK=0
 FAIL=1
+
 SEQ="seq"
 
 function check_dependencies() {
@@ -27,31 +36,70 @@ function check_dependencies() {
       SEQ="jot"
     fi
   fi
+
+  if ! type "qrencode" > /dev/null 2>&1;
+  then
+    echo "You need qrencode installed on your system"
+
+    exit $FAIL
+  fi
+
+  if ! type "curl" > /dev/null 2>&1;
+  then
+    echo "You need curl installed on your system"
+
+    exit $FAIL
+  fi
+
+  if ! type "jq" > /dev/null 2>&1;
+  then
+    echo "You need jq installed on your system"
+
+    exit $FAIL
+  fi
 }
 
 function require_curl() {
     which curl 2>&1 > /dev/null
+
     if [ $? -eq 0 ]
     then
         return $OK
     fi
 
-    # if `which` is not installed this check is ran
     curl --help 2>&1 > /dev/null
 
-    return $FAIL
+    exit $FAIL
 }
 
+# Retrieves tru.ID credentials from project's `tru.json` file.
+function get_credentials() {
+  FILE="${DEST_DIRECTORY}tru-id-ssh-auth/tru.json"
+
+  if [ -f "$FILE" ]; then
+    BASIC_AUTH_USER=$(jq -r ".credentials[].client_id" ${FILE})
+    BASIC_AUTH_PASSWORD=$(jq -r ".credentials[].client_secret" ${FILE})
+
+    return $OK
+  fi
+
+  echo "Unable to retrieve project credentials. Please make sure your project directory has a `tru.json` file."
+  exit $FAIL
+}
+
+# Creates an access token needed to create a PhoneCheck request.
 function create_access_token() {
-    CREDENTIALS=$(echo -ne "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" | base64);
+    get_credentials
+
+    CREDENTIALS=$(echo -ne "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" | base64 -w 0);
 
     # Make request to get access token
     response=`curl \
         --header "Authorization: Basic $CREDENTIALS" \
         --header "Content-Type: application/x-www-form-urlencoded" \
         --request POST $CREATE_AUTH_TOKEN_URL\
-        --data-urlencode 'grant_type=client_credentials' \
-        --data-urlencode 'scope=phone_check coverage' --silent`
+        --data-urlencode "grant_type=client_credentials" \
+        --data-urlencode "scope=phone_check coverage" --silent`
 
     curl_exit_code=$?
 
@@ -60,47 +108,71 @@ function create_access_token() {
     
     if [ $curl_exit_code -ne 0 ]
     then
+        echo $curl_exit_code
         echo "Error running curl"
     fi
 }
 
 function create_check() {
-    if [ "$2" == "" ]; then
-        echo "Positional parameter 1 is empty"
+    config_file="${DEST_DIRECTORY}tru-id-ssh-auth/tru-id-ssh-auth.conf"
+    currentUser=$USER;
+    phoneNumber="";
+    
+    while read line; do
+        if [[ $line =~ user=$currentUser: ]] ; then
+            phoneNumber=$(echo "${line}" | sed s/user=${currentUser}://g);
+        fi
+    done <${config_file}
+
+    if [ "$phoneNumber" == "" ]; then
+        echo "Phone Number is empty"
 
         return 0
     fi
 
-    echo "Create Access Token"
+    # Checking Credentials are installed
+    get_credentials
+
+    # Creating an Access Token
     create_access_token
 
-    echo "Make Phone Check request"
-
+    # Making a Phone Check request"
     response=`curl \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --header "Content-Type: application/json" \
         --request POST $PHONE_CHECK_URL\
-        --data-raw "{\"phone_number\":\"${2}\"}" --silent`
+        --data-raw "{\"phone_number\":\"${phoneNumber}\"}" --silent`
 
     curl_exit_code=$?
     
     if [ $curl_exit_code -ne 0 ]
     then
         echo "Error running curl"
+        return 1;
     fi
 
-    echo "Handle Phone Check Response"
-
+    # Handling Phone Check Response
     check_id=$(jq -r .check_id <<< "${response}" )
     status=$(jq -r .status <<< "${response}" )
     check_url=$(jq -r ._links.check_url.href <<< "${response}" )
 
+    # Generate QR code
     qrencode -s 30 -t ANSI "https://r.tru.id?u=${check_url}&c=${check_id}&t=${ACCESS_TOKEN}"
 
     # Start polling
+    start_polling
 
+    echo 'Check Status';
+    echo $CHECK_STATUS;
+    echo 'check status 2';
+
+    return $CHECK_STATUS;
+}
+
+function start_polling() {
     # Check every 5 seconds for status on Check.
     interval_in_seconds=5
+    CHECK_STATUS=$FAIL
 
     while true;
     do
@@ -115,6 +187,8 @@ function create_check() {
         if [ $curl_exit_code -ne 0 ]
         then
             echo "Error running curl"
+
+            return $FAIL;
         fi
 
         status=$(jq -r .status <<< "${response}" )
@@ -123,14 +197,33 @@ function create_check() {
         # If check is complete, output
         if [[ "$status" != "PENDING" && "$status" != "ACCEPTED" ]]; then
             if [ "$status" == "COMPLETED" ]; then
-                echo "Completed";
+                if [ "$match" == "true" ]; then
+                  CHECK_STATUS=$OK;
+
+                  run_shell
+                #   return $OK;
+                else
+                  echo "No match found!"
+                  CHECK_STATUS=$FAIL
+
+                  return $FAIL;
+                fi
             elif [ "$status" == "EXPIRED" ]; then
                 echo "Expired";
+                CHECK_STATUS=$FAIL
+
+                return $FAIL;
             elif [ "$status" == "ERROR" ]; then
                 echo "Error";
+                CHECK_STATUS=$FAIL
+
+                return $FAIL;
             else
                 echo "$status"
-                echo "No idea";
+                echo "404, no status was found";
+                CHECK_STATUS=$FAIL
+                
+                return $FAIL;
             fi
 
             break;
@@ -139,12 +232,152 @@ function create_check() {
         # Otherwise continue
         sleep $interval_in_seconds;
     done
+}
+
+# Install SSH Auth plugin to the server
+function install() {
+    config_file="${DEST_DIRECTORY}tru-id-ssh-auth/tru-id-ssh-auth.conf"
+
+    # Ensure our target directory is present
+    set -e
+    echo "Making directory in ${DEST_DIRECTORY}"
+    mkdir "/usr/local/bin/tru-id-ssh-auth"
+    set +e
+
+    if [[ ! -r `dirname "${DEST_DIRECTORY}"` ]]
+    then
+      echo "${DEST_DIRECTORY} is not writable. Try again using sudo"
+      return $FAIL
+    fi
+
+    echo "Copying /root/tru-id-ssh-auth/ to ${DEST_DIRECTORY}..."
+    cp -r "/root/tru-id-ssh-auth" "${DEST_DIRECTORY}"
+
+    echo "Setting up permissions..."
+    chmod 755 $DEST_DIRECTORY
+
+    if [[ ! -f ${config_file} ]]
+    then
+      echo "Generating initial config on ${config_file}..."
+      echo "header=tru.ID SSH Auth initialised." > "${config_file}"
+    else
+      echo "A config file was found on ${config_file}. Edit it manually if you want to change the API key"
+    fi
+
+    chmod 644 ${config_file}
+
+    # TODO, uncomment this if using on a server other than Docker
+    # OR Figure a way to restart openssh without Docker restarting
+    # add_force_command "${DEST_DIRECTORY}tru-id-ssh-auth/ssh-auth"
+
+    echo ""
+    echo "To enable tru.ID authentication on a user the following command: "
+    echo ""
+
+    echo "   ${DEST_DIRECTORY}tru-id-ssh-auth/ssh-auth register-user <username> <phone-number-inc-country-code>"
+    echo "   Example: ${DEST_DIRECTORY}tru-id-ssh-auth/ssh-auth register-user test 447000000000"
+
+    echo ""
+    echo "To uninstall tru.ID SSH type:"
+    echo ""
+    echo "   ${DEST_DIRECTORY}tru-id-ssh-auth/ssh-auth uninstall"
+    echo ""
+    echo "      Restart the SSH server to apply changes"
+    echo ""
+}
+
+function uninstall() {
+    find_sshd_config
+
+    if [[ $1 != "quiet" ]]
+    then
+      echo "Uninstalling tru.ID SSH from $SSHD_CONFIG..."
+    fi
+
+    if [[ -w $SSHD_CONFIG ]]
+    then
+        sed -ie '/^ForceCommand.*tru-id-ssh-auth.*/d' $SSHD_CONFIG
+    fi
+
+    if [[ $1 != "quiet" ]]
+    then
+        echo "tru.ID SSH was uninstalled."
+        echo "Now restart the ssh server to apply changes and then remove ${DEST_DIRECTORY}/tru-id-ssh-auth"
+    fi
+}
+
+function add_force_command() {
+    echo "Trying to add force command to $SSHD_CONFIG"
+    find_sshd_config
+    auth_ssh_command="$1"
+
+    if [[ -w $SSHD_CONFIG ]]
+    then
+      echo "Adding 'ForceCommand ${auth_ssh_command} login' to ${SSHD_CONFIG}"
+      uninstall "quiet" # remove previous installations
+
+      echo -e "\nForceCommand ${auth_ssh_command} login" >> ${SSHD_CONFIG}
+      echo ""
+
+      check_sshd_config_file
+
+      echo "    MAKE SURE YOU DO NOT MOVE/REMOVE ${auth_ssh_command} BEFORE UNINSTALLING tru.ID SSH Plugin"
+      sleep 5
+    fi
+}
+
+function find_sshd_config() {
+    echo "Trying to find sshd_config file"
+    if [[ -f /etc/sshd_config ]]
+    then
+        SSHD_CONFIG="/etc/sshd_config"
+    elif [[ -f /etc/ssh/sshd_config ]]
+    then
+        SSHD_CONFIG="/etc/ssh/sshd_config"
+    else
+        echo "Cannot find sshd_config in your server. Authy SSH will be enabled when you add the ForceCommand to it"
+    fi
+}
+
+function check_sshd_config_file() {
+  echo "Checking the validity of $SSHD_CONFIG file..."
+
+  sshd -t
+
+  if [ $? -ne 0 ]
+  then
+    echo "sshd_config file is invalid. MAKE SURE YOU DO NOT RESTART THE SSH SERVER UNTIL YOU FIX IT."
+    exit $FAIL
+  fi
 
 }
 
-# function start_polling() {
+# usage: register-user "user" "phone_number"
+function register_user() {
+  config_file="${DEST_DIRECTORY}tru-id-ssh-auth/tru-id-ssh-auth.conf"
 
-# }
+  if [[ $2 && $3 ]]
+  then
+      echo "user=$2:$3" >> ${config_file}
+      echo "" >> ${config_file}
+      echo "User was registered"
+  else
+      echo "Cannot register user"
+  fi
+}
+
+# Once successful, allows user to proceed with access to server
+function run_shell() {
+    if [[ "$SSH_ORIGINAL_COMMAND" != "" ]]
+    then
+        exec /bin/bash -c "${SSH_ORIGINAL_COMMAND}"
+    elif [ $SHELL ]
+    then
+        exec -l $SHELL
+    fi
+
+    exit $?
+}
 
 require_curl
 
@@ -164,7 +397,17 @@ case $1 in
     create-check)
         create_check "$@"
         ;;
+    register-user)
+        register_user "$@"
+        ;;
+    install)
+        install
+        ;;
+    uninstall)
+        uninstall
+        ;;
     *)
+
         cat <<__EOF__
 Usage: ssh-auth <command> <arguments>
 
@@ -173,6 +416,12 @@ VERSION $VERSION
 Available commands:
     version
         Outputs the tru.ID SSH Auth Version
+    install
+        Installs tru.ID SSH Plugin into OpenSSH Server
+    register-user
+        Takes 2 parameters, the username, and their phone number. Enabling their account to require tru.ID SSH Auth to proceed
+    uninstall
+        Uninstalls tru.ID SSH Plugin from OpenSSH Server
 
 __EOF__
         ;;
