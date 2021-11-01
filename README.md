@@ -16,8 +16,8 @@ This repository is a demo application for integrating tru.ID's [PhoneCheck](http
 This example makes use of a Docker container for development purposes. 
 
 ```bash
-docker build -t tru-ID/tru-id-ssh-auth:1.0 .
-docker run -d -p 223:22 tru-ID/tru-id-ssh-auth:1.0
+docker build -t tru-id/tru-id-ssh-auth:1.0 .
+docker run -d -p 223:22 tru-id/tru-id-ssh-auth:1.0
 docker ps -a 
 # copy the CONTAINER ID from the previous command, and replace `<CONTAINER_ID>` with this value
 docker exec -it <CONTAINER_ID> /bin/bash
