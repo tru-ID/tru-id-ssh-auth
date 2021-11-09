@@ -30,7 +30,7 @@ function check_dependencies() {
   then
     if ! type "jot" > /dev/null 2>&1;
     then
-      echo "You need installed on your system either 'seq' or 'jot' command"
+      echo "You need to have either 'seq' or 'jot' installed"
       exit $FAIL
     else
       SEQ="jot"
@@ -157,14 +157,10 @@ function create_check() {
     check_url=$(jq -r ._links.check_url.href <<< "${response}" )
 
     # Generate QR code
-    qrencode -s 30 -t ANSI "https://r.tru.id?u=${check_url}&c=${check_id}&t=${ACCESS_TOKEN}"
+    qrencode -s 3 -t ANSI "https://r.tru.qa?u=${check_url}&c=${check_id}&t=${ACCESS_TOKEN}"
 
     # Start polling
     start_polling
-
-    echo 'Check Status';
-    echo $CHECK_STATUS;
-    echo 'check status 2';
 
     return $CHECK_STATUS;
 }
