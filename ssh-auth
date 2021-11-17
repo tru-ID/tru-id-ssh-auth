@@ -115,16 +115,16 @@ function create_access_token() {
 
 function create_check() {
     config_file="${DEST_DIRECTORY}tru-id-ssh-auth/tru-id-ssh-auth.conf"
-    currentUser=$USER;
-    phoneNumber="";
+    current_user=$USER;
+    phone_number="";
     
     while read line; do
-        if [[ $line =~ user=$currentUser: ]] ; then
-            phoneNumber=$(echo "${line}" | sed s/user=${currentUser}://g);
+        if [[ $line =~ user=$current_user: ]] ; then
+            phone_number=$(echo "${line}" | sed s/user=${current_user}://g);
         fi
     done <${config_file}
 
-    if [ "$phoneNumber" == "" ]; then
+    if [ "$phone_number" == "" ]; then
         echo "Phone Number is empty"
 
         return 0
@@ -141,7 +141,7 @@ function create_check() {
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --header "Content-Type: application/json" \
         --request POST $PHONE_CHECK_URL\
-        --data-raw "{\"phone_number\":\"${phoneNumber}\"}" --silent`
+        --data-raw "{\"phone_number\":\"${phone_number}\"}" --silent`
 
     curl_exit_code=$?
     
@@ -157,7 +157,7 @@ function create_check() {
     check_url=$(jq -r ._links.check_url.href <<< "${response}" )
 
     # Generate QR code
-    qrencode -s 3 -t ANSI "https://r.tru.qa?u=${check_url}&c=${check_id}&t=${ACCESS_TOKEN}"
+    qrencode -s 3 -t ANSI "https://r.tru.qa?u=${check_url}"
 
     # Start polling
     start_polling
