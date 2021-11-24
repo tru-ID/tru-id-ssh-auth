@@ -15,6 +15,10 @@ This repository is a demo application for integrating tru.ID's [PhoneCheck](http
 
 To use this application you will need a [**tru.ID**](https://www.tru.id) account. To signup for one head over to the [signup page](https://tru.id/signup).
 
+Then, in your **tru.ID** [console](https://developer.tru.id/console), navigate to the `Settings` page to create yourself some credentials for your Workspace. Be sure to save the file somewhere secure and make a note of the `client_id` and `client_secret` because this is needed later when setting up the **tru.ID** CLI.
+
+> **Note** once you close this tab, you will no longer be able to retrieve this specific set of credentials in the **tru.ID** console.
+
 ## Create a tru.ID project
 
 To create the **tru.ID** project, first install the **tru.ID** [CLI](https://github.com/tru-ID/tru-cli), by running the following command in your terminal:
