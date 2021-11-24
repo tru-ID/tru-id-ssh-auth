@@ -57,6 +57,13 @@ function check_dependencies() {
 
     exit $FAIL
   fi
+
+  if ! type "qr" > /dev/null 2>&1;
+  then
+    echo "You need the Python library qr installed on your system"
+
+    exit $FAIL
+  fi
 }
 
 function require_curl() {
@@ -157,7 +164,11 @@ function create_check() {
     check_url=$(jq -r ._links.check_url.href <<< "${response}" )
 
     # Generate QR code
-    qrencode -s 3 -t ANSI "https://r.tru.qa?u=${check_url}"
+    qr --ascii "https://r.tru.qa?u=${check_url}" > "qrcode.txt"
+
+    sleep 1
+
+    cat ~/qrcode.txt
 
     # Start polling
     start_polling
@@ -387,16 +398,16 @@ case $1 in
         echo "tru.ID Auth SSH v${VERSION}"
         exit 0
         ;;
-    create-access-token)
-        create_access_token
-        ;;
     create-check)
+        check_dependencies
         create_check "$@"
         ;;
     register-user)
+        check_dependencies
         register_user "$@"
         ;;
     install)
+        check_dependencies
         install
         ;;
     uninstall)
