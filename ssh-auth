@@ -37,13 +37,6 @@ function check_dependencies() {
     fi
   fi
 
-  if ! type "qrencode" > /dev/null 2>&1;
-  then
-    echo "You need qrencode installed on your system"
-
-    exit $FAIL
-  fi
-
   if ! type "curl" > /dev/null 2>&1;
   then
     echo "You need curl installed on your system"
