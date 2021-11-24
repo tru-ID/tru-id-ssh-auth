@@ -2,10 +2,10 @@ FROM ubuntu:latest
 
 RUN apt update && apt install -y \
     software-properties-common
-RUN apt install vim -y sudo
-RUN apt install curl -y sudo
-RUN apt install openssh-server sudo -y
-RUN apt install jq -y sudo
+RUN apt install vim -y
+RUN apt install curl -y
+RUN apt install openssh-server -y
+RUN apt install jq -y
 
 RUN apt-get update && apt-get install -y \
     python3.4 \
