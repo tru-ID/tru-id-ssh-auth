@@ -4,7 +4,6 @@ RUN apt update && apt install -y \
     software-properties-common
 RUN apt install vim -y sudo
 RUN apt install curl -y sudo
-RUN apt install qrencode -y sudo
 RUN apt install openssh-server sudo -y
 RUN apt install jq -y sudo
 
