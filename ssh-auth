@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+VERSION=1
+
+# Status Values
+OK=0
+FAIL=1
+
+SEQ="seq"
+
+function check_dependencies() {
+  if ! type "seq" > /dev/null 2>&1;
+  then
+    if ! type "jot" > /dev/null 2>&1;
+    then
+      echo "You need to have either 'seq' or 'jot' installed"
+      exit $FAIL
+    else
+      SEQ="jot"
+    fi
+  fi
+
+  if ! type "curl" > /dev/null 2>&1;
+  then
+    echo "You need curl installed on your system"
+
+    exit $FAIL
+  fi
+
+  if ! type "jq" > /dev/null 2>&1;
+  then
+    echo "You need jq installed on your system"
+
+    exit $FAIL
+  fi
+
+  if ! type "qr" > /dev/null 2>&1;
+  then
+    echo "You need the Python library qr installed on your system"
+
+    exit $FAIL
+  fi
+}
+
+function require_curl() {
+    which curl 2>&1 > /dev/null
+
+    if [ $? -eq 0 ]
+    then
+        return $OK
+    fi
+
+    curl --help 2>&1 > /dev/null
+
+    exit $FAIL
+}
+
+require_curl
+
+# get the absolute path to the command
+cd `dirname $0`
+COMMAND="$PWD/`basename $0`"
+cd - >/dev/null
+
+case $1 in
+    version)
+        echo "tru.ID Auth SSH v${VERSION}"
+        exit 0
+        ;;
+    check-dependencies)
+        check_dependencies
+        ;;
+    *)
+
+        cat <<__EOF__
+Usage: ssh-auth <command> <arguments>
+
+VERSION $VERSION
+
+Available commands:
+    version
+        Outputs the tru.ID SSH Auth Version
+
+__EOF__
+        ;;
+esac
