@@ -335,7 +335,7 @@ function find_sshd_config() {
     then
         SSHD_CONFIG="/etc/ssh/sshd_config"
     else
-        echo "Cannot find sshd_config in your server. Authy SSH will be enabled when you add the ForceCommand to it"
+        echo "Cannot find sshd_config in your server. tru.ID SSH Auth will be enabled when you add the ForceCommand to it"
     fi
 }
 
