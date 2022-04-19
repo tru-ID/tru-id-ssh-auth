@@ -1,6 +1,7 @@
 import moment from "moment";
 import fetch from "node-fetch";
-import config from "../tru.json";
+// import config from "../tru.json";
+const config = require("../tru.json");
 
 const tru_api_base_url = 'https://eu.api.tru.id';
 
