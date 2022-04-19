@@ -1,0 +1,19 @@
+{
+  "name": "ssh-auth-web-server",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node --experimental-json-modules index.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.0",
+    "express": "^4.17.3",
+    "moment": "^2.29.3",
+    "node-fetch": "^3.2.3"
+  }
+}

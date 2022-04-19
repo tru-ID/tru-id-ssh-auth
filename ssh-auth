@@ -6,8 +6,8 @@ DATA_RESIDENCY=eu
 BASE_URL="https://$DATA_RESIDENCY.api.tru.id"
 
 # API Check URLs
-PHONE_CHECK_URL="$BASE_URL/phone_check/v0.1/checks"
-GET_PHONE_CHECK_URL="$BASE_URL/phone_check/v0.1/checks/"
+PHONE_CHECK_URL="$BASE_URL/phone_check/v0.2/checks"
+GET_PHONE_CHECK_URL="$BASE_URL/phone_check/v0.2/checks/"
 CREATE_AUTH_TOKEN_URL="$BASE_URL/oauth2/v1/token"
 
 APP_ROOT=`dirname $0`
