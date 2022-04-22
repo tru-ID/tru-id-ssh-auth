@@ -6,6 +6,8 @@ DATA_RESIDENCY=eu
 BASE_URL="https://$DATA_RESIDENCY.api.tru.id"
 
 # API Check URLs
+BACKEND_SERVER="<Your NGROK URL>"
+REDIRECT_URL="$BACKEND_SERVER/complete-check"
 PHONE_CHECK_URL="$BASE_URL/phone_check/v0.2/checks"
 GET_PHONE_CHECK_URL="$BASE_URL/phone_check/v0.2/checks/"
 CREATE_AUTH_TOKEN_URL="$BASE_URL/oauth2/v1/token"
@@ -141,7 +143,7 @@ function create_check() {
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --header "Content-Type: application/json" \
         --request POST $PHONE_CHECK_URL\
-        --data-raw "{\"phone_number\":\"${phone_number}\"}" --silent`
+        --data-raw "{\"phone_number\":\"${phone_number}\", \"redirect_url\":\"${REDIRECT_URL}\"}" --silent`
 
     curl_exit_code=$?
     
@@ -157,7 +159,7 @@ function create_check() {
     check_url=$(jq -r ._links.check_url.href <<< "${response}" )
 
     # Generate QR code
-    qr --ascii "https://r.tru.qa?u=${check_url}" > "qrcode.txt"
+    qr --ascii "${check_url}" > "qrcode.txt"
 
     sleep 1
 
@@ -201,7 +203,6 @@ function start_polling() {
                   CHECK_STATUS=$OK;
 
                   run_shell
-                #   return $OK;
                 else
                   echo "No match found!"
                   CHECK_STATUS=$FAIL
@@ -209,12 +210,12 @@ function start_polling() {
                   return $FAIL;
                 fi
             elif [ "$status" == "EXPIRED" ]; then
-                echo "Expired";
+                echo "Check Expired";
                 CHECK_STATUS=$FAIL
 
                 return $FAIL;
             elif [ "$status" == "ERROR" ]; then
-                echo "Error";
+                echo "Check Error Received";
                 CHECK_STATUS=$FAIL
 
                 return $FAIL;
