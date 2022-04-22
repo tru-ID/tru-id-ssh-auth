@@ -19,6 +19,8 @@ RUN  echo 'test:test' | chpasswd
 
 CMD ["/usr/sbin/sshd","-D"]
 
+ADD . /root/tru-id-ssh-auth
+
 COPY sshd_config /etc/ssh/sshd_config
 
 RUN service ssh start
