@@ -1,9 +1,13 @@
-import moment from "moment";
-import fetch from "node-fetch";
-// import config from "../tru.json";
+const moment = require("moment");
+const fetch = require("node-fetch");
+const httpSignature = require("http-signature");
+const jwksClient = require("jwks-rsa");
 const config = require("../tru.json");
 
 const tru_api_base_url = 'https://eu.api.tru.id';
+const keyClient = jwksClient({
+  jwksUri: `${tru_api_base_url}/.well-known/jwks.json`,
+});
 
 // token cache in memory
 const TOKEN = {
@@ -11,7 +15,7 @@ const TOKEN = {
   expiresAt: undefined,
 };
 
-export async function getAccessToken() {
+async function getAccessToken() {
   // check if existing valid token
   if (TOKEN.accessToken !== undefined && TOKEN.expiresAt !== undefined) {
     // we already have an access token let's check if it's not expired
@@ -46,7 +50,7 @@ export async function getAccessToken() {
   });
 
   if (!res.ok) {
-    await handleApiError(res);
+    return res.status(400).body("Unable to create access token")
   }
 
   const json = await res.json();
@@ -57,9 +61,9 @@ export async function getAccessToken() {
 
   return json.access_token;
 }
-  
-export async function patchPhoneCheck(checkId, code) {
-  const url = `${process.env.TRU_API_BASE_URL}/phone_check/v0.2/checks/${checkId}`;
+
+async function patchPhoneCheck(checkId, code) {
+  const url = `${tru_api_base_url}/phone_check/v0.2/checks/${checkId}`;
   const body = [{ op: "add", path: "/code", value: code }];
 
   const token = await getAccessToken();
@@ -75,11 +79,52 @@ export async function patchPhoneCheck(checkId, code) {
   });
 
   if (!res.ok) {
-    await handleApiError(res);
+    return res;
   }
 
   const json = await res.json();
 
   return json;
 }
-  
+
+async function verifySignature(originalUrl) {
+  try {
+    const url = new URL(originalUrl);
+    const signature = Buffer.from(
+      url.searchParams.get("authorization"),
+      "base64"
+    ).toString("utf-8");
+    const date = Buffer.from(url.searchParams.get("date"), "base64").toString(
+      "utf-8"
+    );
+    url.searchParams.delete("authorization");
+    url.searchParams.delete("date");
+    const originalRequest = {
+      url: `${url.pathname}${url.search}`,
+      method: "get",
+      hostname: url.hostname,
+      headers: {
+        date,
+        host: url.host,
+        authorization: signature,
+      },
+    };
+    const parsedOriginalRequest = httpSignature.parseRequest(originalRequest, {
+      clockSkew: 300,
+    });
+    const jwk = await keyClient.getSigningKey(parsedOriginalRequest.keyId);
+    const verified = httpSignature.verifySignature(
+      parsedOriginalRequest,
+      jwk.getPublicKey()
+    );
+    return verified;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+module.exports = {
+  patchPhoneCheck,
+  verifySignature
+};
