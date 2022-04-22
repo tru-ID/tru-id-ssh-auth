@@ -21,6 +21,8 @@ CMD ["/usr/sbin/sshd","-D"]
 
 COPY sshd_config /etc/ssh/sshd_config
 
+ADD . /root/tru-id-ssh-auth
+
 RUN service ssh start
 
 EXPOSE 22
