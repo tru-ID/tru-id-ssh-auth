@@ -4,3 +4,5 @@ services:
     build: .
     volumes:
       - ".:/root/tru-id-ssh-auth"
+    ports:
+      - "223:22"
