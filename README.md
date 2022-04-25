@@ -67,19 +67,9 @@ cp ssh-auth-project/tru.json tru-id-ssh-auth/
 
 This example makes use of a Docker container for development purposes so, if you run the following commands in your Terminal to do the following:
 
-- Build your Docker container with the tag `tru-id/tru-id-ssh-auth` and version 1.0.
-- Run the docker container with the tag `tru-id/tru-id-ssh-auth`. This will also map the internal port `22` (ssh) to an externally accessible port `223`.
-- Display all docker containers currently running
-- Open the Docker container with a bash session.
-
-So, in your terminal run the following four commands:
-
 ```bash
-docker build -t tru-id/tru-id-ssh-auth:1.0 .
-docker run -d -p 223:22 tru-id/tru-id-ssh-auth:1.0
-docker ps -a 
-# copy the CONTAINER ID from the previous command, and replace `<CONTAINER_ID>` with this value
-docker exec -it <CONTAINER_ID> /bin/bash
+docker-compose up --build -d
+docker-compose exec ssh bash
 ```
 
 ## Install
